@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Setlist Timer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Courier+Prime:wght@400;700&display=swap');
+
+  :root{
+    --paper:#f2ede2;
+    --ink:#1c1a17;
+    --marker:#c0392b;
+    --tape:#e8dcc0;
+    --line:#c9bfa8;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:#2b2823;
+    font-family:'Courier Prime', monospace;
+    color:var(--ink);
+    padding:24px 16px 60px;
+    display:flex;
+    justify-content:center;
+  }
+  .board{
+    width:100%;
+    max-width:520px;
+    background:var(--paper);
+    background-image:
+      repeating-linear-gradient(transparent, transparent 38px, var(--line) 39px);
+    padding:28px 22px 22px;
+    border-radius:2px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);
+    position:relative;
+  }
+  .board::before{
+    content:"";
+    position:absolute;
+    top:-14px; left:50%;
+    transform:translateX(-50%) rotate(-2deg);
+    width:90px; height:28px;
+    background:var(--tape);
+    opacity:.85;
+  }
+  h1{
+    font-family:'Oswald', sans-serif;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:2px;
+    font-size:22px;
+    margin:0 0 2px;
+    border-bottom:3px solid var(--ink);
+    padding-bottom:10px;
+  }
+  .sub{
+    font-size:12px;
+    opacity:.65;
+    margin:8px 0 18px;
+    letter-spacing:.5px;
+  }
+  .gap-control{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size:12px;
+    margin-bottom:16px;
+    background:rgba(0,0,0,0.04);
+    padding:8px 10px;
+    border:1px solid var(--line);
+  }
+  .gap-control input[type=range]{flex:1; accent-color:var(--marker);}
+  .gap-control .val{font-weight:700; min-width:34px; text-align:right;}
+
+  ul#list{
+    list-style:none;
+    margin:0 0 16px;
+    padding:0;
+  }
+  li{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:9px 4px;
+    background:transparent;
+    cursor:grab;
+    user-select:none;
+    border-bottom:1px dashed var(--line);
+    transition:opacity .15s;
+  }
+  li.dragging{opacity:.35;}
+  li.excluded{opacity:.4; text-decoration:line-through;}
+  li.excluded .time{text-decoration:line-through;}
+  .handle{
+    font-size:14px;
+    opacity:.4;
+    letter-spacing:-2px;
+    width:14px;
+  }
+  .num{
+    font-family:'Oswald',sans-serif;
+    font-weight:700;
+    font-size:12px;
+    color:var(--marker);
+    width:18px;
+  }
+  .name{
+    flex:1;
+    font-size:14px;
+    font-weight:700;
+  }
+  .time{
+    font-size:13px;
+    opacity:.7;
+  }
+  input[type=checkbox]{
+    accent-color:var(--marker);
+    width:15px;height:15px;
+  }
+  .gapline{
+    text-align:center;
+    font-size:10px;
+    letter-spacing:2px;
+    opacity:.35;
+    padding:2px 0;
+  }
+
+  .totals{
+    border-top:3px solid var(--ink);
+    padding-top:14px;
+    margin-top:6px;
+  }
+  .row{
+    display:flex;
+    justify-content:space-between;
+    font-size:13px;
+    padding:3px 0;
+  }
+  .row.big{
+    font-family:'Oswald',sans-serif;
+    font-size:20px;
+    font-weight:700;
+    margin-top:8px;
+    color:var(--marker);
+  }
+  .target-badge{
+    display:inline-block;
+    margin-top:10px;
+    font-size:11px;
+    padding:4px 8px;
+    border:1px solid var(--ink);
+    letter-spacing:.5px;
+  }
+  .target-badge.ok{background:var(--ink); color:var(--paper);}
+  footer{
+    text-align:center;
+    color:#8a8478;
+    font-size:11px;
+    margin-top:16px;
+    letter-spacing:.5px;
+  }
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>Setlist Timer</h1>
+  <div class="sub">Drag to reorder · check to include · set your gap</div>
+
+  <div class="gap-control">
+    <span>GAP</span>
+    <input type="range" id="gapSlider" min="0" max="120" value="52" step="1">
+    <span class="val"><span id="gapVal">52</span>s</span>
+  </div>
+
+  <ul id="list"></ul>
+
+  <div class="totals">
+    <div class="row"><span id="songCount">0 songs</span><span id="songTime">0:00</span></div>
+    <div class="row"><span id="gapCount">0 gaps</span><span id="gapTime">0:00</span></div>
+    <div class="row big"><span>TOTAL</span><span id="grandTotal">0:00</span></div>
+    <span class="target-badge" id="badge">— vs 35:00 target</span>
+  </div>
+
+  <footer>tap the handle to drag · runs entirely in your browser</footer>
+</div>
+
+<script>
+const songs = [
+  {name:"Valerie", sec:200},
+  {name:"One Day Like This", sec:333},
+  {name:"Proud Mary", sec:260},
+  {name:"Livin la Vida Loca", sec:215},
+  {name:"Don't Look Back in Anger", sec:310},
+  {name:"In the Summertime", sec:185},
+  {name:"Mamma Mia", sec:190},
+  {name:"Jolene", sec:160},
+  {name:"Can't Take My Eyes Off You", sec:180},
+  {name:"Take On Me", sec:200},
+];
+
+let state = songs.map((s,i)=>({...s, id:i, included:true}));
+let gapSec = 52;
+
+const listEl = document.getElementById('list');
+const gapSlider = document.getElementById('gapSlider');
+const gapVal = document.getElementById('gapVal');
+
+function fmt(s){
+  const m = Math.floor(s/60), r = s%60;
+  return m + ":" + String(r).padStart(2,'0');
+}
+
+function render(){
+  listEl.innerHTML = '';
+  state.forEach((song, idx) => {
+    const li = document.createElement('li');
+    li.draggable = true;
+    li.dataset.id = song.id;
+    if(!song.included) li.classList.add('excluded');
+    li.innerHTML = `
+      <span class="handle">⠿</span>
+      <span class="num">${idx+1}</span>
+      <span class="name">${song.name}</span>
+      <span class="time">${fmt(song.sec)}</span>
+      <input type="checkbox" ${song.included ? 'checked':''}>
+    `;
+    li.querySelector('input').addEventListener('change', (e)=>{
+      song.included = e.target.checked;
+      render();
+    });
+    li.addEventListener('dragstart', ()=>{ li.classList.add('dragging'); dragId = song.id; });
+    li.addEventListener('dragend', ()=>{ li.classList.remove('dragging'); });
+    li.addEventListener('dragover', (e)=> e.preventDefault());
+    li.addEventListener('drop', (e)=>{
+      e.preventDefault();
+      const fromIdx = state.findIndex(s=>s.id===dragId);
+      const toIdx = state.findIndex(s=>s.id===song.id);
+      const [moved] = state.splice(fromIdx,1);
+      state.splice(toIdx,0,moved);
+      render();
+    });
+    listEl.appendChild(li);
+  });
+  updateTotals();
+}
+
+let dragId = null;
+
+function updateTotals(){
+  const included = state.filter(s=>s.included);
+  const songTotal = included.reduce((a,s)=>a+s.sec,0);
+  const gaps = Math.max(included.length - 1, 0);
+  const gapTotal = gaps * gapSec;
+  const grand = songTotal + gapTotal;
+
+  document.getElementById('songCount').textContent = included.length + " song" + (included.length!==1?'s':'');
+  document.getElementById('songTime').textContent = fmt(songTotal);
+  document.getElementById('gapCount').textContent = gaps + " gap" + (gaps!==1?'s':'') + " × " + gapSec + "s";
+  document.getElementById('gapTime').textContent = fmt(gapTotal);
+  document.getElementById('grandTotal').textContent = fmt(grand);
+
+  const target = 2100; // 35:00
+  const diff = grand - target;
+  const badge = document.getElementById('badge');
+  if(Math.abs(diff) <= 15){
+    badge.textContent = "✓ within 15s of 35:00 target";
+    badge.classList.add('ok');
+  } else {
+    const sign = diff > 0 ? "+" : "−";
+    badge.textContent = sign + fmt(Math.abs(diff)) + " vs 35:00 target";
+    badge.classList.remove('ok');
+  }
+}
+
+gapSlider.addEventListener('input', (e)=>{
+  gapSec = parseInt(e.target.value,10);
+  gapVal.textContent = gapSec;
+  updateTotals();
+});
+
+render();
+</script>
+</body>
+</html>
