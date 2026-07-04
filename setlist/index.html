@@ -103,6 +103,11 @@
     touch-action:none;
     cursor:grab;
   }
+  .handle:focus-visible{
+    outline:2px solid var(--marker);
+    outline-offset:2px;
+    opacity:1;
+  }
   .num{
     font-family:'Oswald',sans-serif;
     font-weight:700;
@@ -187,7 +192,7 @@
     <span class="target-badge" id="badge">— vs 35:00 target</span>
   </div>
 
-  <footer>tap the handle to drag · runs entirely in your browser</footer>
+  <footer>drag the handle with finger or mouse · or tab to it and use ↑/↓ · runs entirely in your browser</footer>
 </div>
 
 <script>
@@ -197,7 +202,7 @@ const songs = [
   {name:"Proud Mary", sec:260},
   {name:"Livin la Vida Loca", sec:215},
   {name:"Don't Look Back in Anger", sec:310},
-  {name:"In the Summertime", sec:185},
+  {name:"Sunny Afternoon", sec:185},
   {name:"Mamma Mia", sec:190},
   {name:"Jolene", sec:160},
   {name:"Can't Take My Eyes Off You", sec:180},
@@ -220,11 +225,10 @@ function render(){
   listEl.innerHTML = '';
   state.forEach((song, idx) => {
     const li = document.createElement('li');
-    li.draggable = true;
     li.dataset.id = song.id;
     if(!song.included) li.classList.add('excluded');
     li.innerHTML = `
-      <span class="handle">⠿</span>
+      <span class="handle" tabindex="0" role="button" aria-label="Reorder ${song.name}: drag, or use arrow keys">⠿</span>
       <span class="num">${idx+1}</span>
       <span class="name">${song.name}</span>
       <span class="time">${fmt(song.sec)}</span>
@@ -234,46 +238,54 @@ function render(){
       song.included = e.target.checked;
       render();
     });
-    li.addEventListener('dragstart', ()=>{ li.classList.add('dragging'); dragId = song.id; });
-    li.addEventListener('dragend', ()=>{ li.classList.remove('dragging'); });
-
     const handle = li.querySelector('.handle');
-    handle.addEventListener('touchstart', (e)=>{
+    handle.addEventListener('pointerdown', (e)=>{
+      if(e.button !== 0 && e.pointerType === 'mouse') return;
       e.preventDefault();
       li.classList.add('dragging');
-    }, {passive:false});
-    handle.addEventListener('touchmove', (e)=>{
-      e.preventDefault();
-      const touch = e.touches[0];
-      const under = document.elementFromPoint(touch.clientX, touch.clientY);
-      const over = under && under.closest('li');
-      if(over && over !== li && over.parentNode === listEl){
-        const rect = over.getBoundingClientRect();
-        const before = touch.clientY < rect.top + rect.height/2;
-        listEl.insertBefore(li, before ? over : over.nextSibling);
-      }
-    }, {passive:false});
-    handle.addEventListener('touchend', ()=>{
-      li.classList.remove('dragging');
-      const order = [...listEl.children].map(el=>parseInt(el.dataset.id,10));
-      state.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
-      render();
+      const onMove = (ev)=>{
+        const under = document.elementFromPoint(ev.clientX, ev.clientY);
+        const over = under && under.closest('li');
+        if(over && over !== li && over.parentNode === listEl){
+          const rect = over.getBoundingClientRect();
+          const before = ev.clientY < rect.top + rect.height/2;
+          listEl.insertBefore(li, before ? over : over.nextSibling);
+        }
+      };
+      const onEnd = ()=>{
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onEnd);
+        document.removeEventListener('pointercancel', onEnd);
+        li.classList.remove('dragging');
+        const order = [...listEl.children].map(el=>parseInt(el.dataset.id,10));
+        state.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
+        render();
+      };
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onEnd);
+      document.addEventListener('pointercancel', onEnd);
     });
-    li.addEventListener('dragover', (e)=> e.preventDefault());
-    li.addEventListener('drop', (e)=>{
-      e.preventDefault();
-      const fromIdx = state.findIndex(s=>s.id===dragId);
-      const toIdx = state.findIndex(s=>s.id===song.id);
-      const [moved] = state.splice(fromIdx,1);
-      state.splice(toIdx,0,moved);
-      render();
+    handle.addEventListener('keydown', (e)=>{
+      if(e.key === 'ArrowUp' || e.key === 'ArrowDown'){
+        e.preventDefault();
+        moveSong(song.id, e.key === 'ArrowUp' ? -1 : 1);
+      }
     });
     listEl.appendChild(li);
   });
   updateTotals();
 }
 
-let dragId = null;
+function moveSong(id, delta){
+  const idx = state.findIndex(s=>s.id===id);
+  const to = idx + delta;
+  if(to < 0 || to >= state.length) return;
+  const [moved] = state.splice(idx,1);
+  state.splice(to,0,moved);
+  render();
+  const li = listEl.querySelector('li[data-id="'+id+'"]');
+  if(li) li.querySelector('.handle').focus();
+}
 
 function updateTotals(){
   const included = state.filter(s=>s.included);
