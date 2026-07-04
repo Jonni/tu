@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Setlist Timer</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;700&family=Courier+Prime:wght@400;700&display=swap');
@@ -92,10 +93,15 @@
   li.excluded{opacity:.4; text-decoration:line-through;}
   li.excluded .time{text-decoration:line-through;}
   .handle{
-    font-size:14px;
+    font-size:16px;
     opacity:.4;
     letter-spacing:-2px;
-    width:14px;
+    width:32px;
+    padding:8px 4px;
+    margin:-8px 0;
+    text-align:center;
+    touch-action:none;
+    cursor:grab;
   }
   .num{
     font-family:'Oswald',sans-serif;
@@ -230,6 +236,29 @@ function render(){
     });
     li.addEventListener('dragstart', ()=>{ li.classList.add('dragging'); dragId = song.id; });
     li.addEventListener('dragend', ()=>{ li.classList.remove('dragging'); });
+
+    const handle = li.querySelector('.handle');
+    handle.addEventListener('touchstart', (e)=>{
+      e.preventDefault();
+      li.classList.add('dragging');
+    }, {passive:false});
+    handle.addEventListener('touchmove', (e)=>{
+      e.preventDefault();
+      const touch = e.touches[0];
+      const under = document.elementFromPoint(touch.clientX, touch.clientY);
+      const over = under && under.closest('li');
+      if(over && over !== li && over.parentNode === listEl){
+        const rect = over.getBoundingClientRect();
+        const before = touch.clientY < rect.top + rect.height/2;
+        listEl.insertBefore(li, before ? over : over.nextSibling);
+      }
+    }, {passive:false});
+    handle.addEventListener('touchend', ()=>{
+      li.classList.remove('dragging');
+      const order = [...listEl.children].map(el=>parseInt(el.dataset.id,10));
+      state.sort((a,b)=>order.indexOf(a.id)-order.indexOf(b.id));
+      render();
+    });
     li.addEventListener('dragover', (e)=> e.preventDefault());
     li.addEventListener('drop', (e)=>{
       e.preventDefault();
